@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Install everything Jarvis needs on Windows 10 or 11.
+  Install everything ARIA needs on Windows 10 or 11.
 
 .DESCRIPTION
   Installs the build toolchain (Rust, Node, VS Build Tools, WebView2) via winget,
@@ -115,7 +115,7 @@ if (Test-Path $PackageJson) {
         Ok 'npm dependencies installed'
 
         if ($Build) {
-            Say 'Building Jarvis (this takes a few minutes on a first build)'
+            Say 'Building ARIA (this takes a few minutes on a first build)'
             npm run desktop:build
             Ok 'installers are in src-tauri\target\release\bundle\'
         }
@@ -125,6 +125,6 @@ if (Test-Path $PackageJson) {
 }
 
 Write-Host ''
-Write-Host 'Jarvis is ready.' -ForegroundColor Green
+Write-Host 'ARIA is ready.' -ForegroundColor Green
 Write-Host '  Start it with: npm run desktop:dev'
 Write-Host '  Offline voice: bash scripts/download-models.sh  (use Git Bash or WSL)'
