@@ -6,7 +6,7 @@
 //! the Rust side free of `unsafe` and identical across build targets.
 
 use super::{input, resolve_window, MouseButton, Point, Region, ScrollDirection, WindowInfo};
-use crate::util::{run_owned, JResult, AriaError};
+use crate::util::{run_owned, JResult, NovaError};
 use serde_json::Value;
 
 /// Run a PowerShell script from a temp file — passing multi-line scripts with
@@ -32,7 +32,7 @@ async fn powershell(script: &str) -> JResult<String> {
     let _ = std::fs::remove_file(&path);
     let out = out?;
     if !out.ok() {
-        return Err(AriaError::msg(format!(
+        return Err(NovaError::msg(format!(
             "PowerShell failed: {}",
             out.stderr.trim()
         )));
@@ -114,7 +114,7 @@ const USER32: &str = r#"
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
-public class ARIAWin {
+public class NOVAWin {
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
@@ -129,11 +129,11 @@ public class ARIAWin {
 pub async fn list_windows() -> JResult<Vec<WindowInfo>> {
     let script = format!(
         r#"{USER32}
-$fg = [ARIAWin]::GetForegroundWindow()
+$fg = [NOVAWin]::GetForegroundWindow()
 $list = @()
 Get-Process | Where-Object {{ $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -ne '' }} | ForEach-Object {{
-  $r = New-Object ARIAWin+RECT
-  [void][ARIAWin]::GetWindowRect($_.MainWindowHandle, [ref]$r)
+  $r = New-Object NOVAWin+RECT
+  [void][NOVAWin]::GetWindowRect($_.MainWindowHandle, [ref]$r)
   $list += [PSCustomObject]@{{
     id = $_.MainWindowHandle.ToString()
     title = $_.MainWindowTitle
@@ -151,7 +151,7 @@ ConvertTo-Json -InputObject @($list) -Compress
 
     let out = powershell(&script).await?;
     let parsed: Value = serde_json::from_str(out.trim())
-        .map_err(|e| AriaError::msg(format!("could not parse window list: {e}")))?;
+        .map_err(|e| NovaError::msg(format!("could not parse window list: {e}")))?;
 
     let mut windows = Vec::new();
     for w in parsed.as_array().cloned().unwrap_or_default() {
@@ -173,13 +173,13 @@ async fn target_handle(target: &str) -> JResult<String> {
     let windows = list_windows().await?;
     resolve_window(&windows, target)
         .map(|w| w.id.clone())
-        .ok_or_else(|| AriaError::msg(format!("no window matching `{target}`")))
+        .ok_or_else(|| NovaError::msg(format!("no window matching `{target}`")))
 }
 
 pub async fn focus_window(target: &str) -> JResult<()> {
     let h = target_handle(target).await?;
     powershell(&format!(
-        "{USER32}\n[void][ARIAWin]::ShowWindow([IntPtr]{h}, 9)\n[void][ARIAWin]::SetForegroundWindow([IntPtr]{h})"
+        "{USER32}\n[void][NOVAWin]::ShowWindow([IntPtr]{h}, 9)\n[void][NOVAWin]::SetForegroundWindow([IntPtr]{h})"
     ))
     .await?;
     Ok(())
@@ -189,9 +189,9 @@ pub async fn move_window(target: &str, x: i32, y: i32) -> JResult<()> {
     let h = target_handle(target).await?;
     let windows = list_windows().await?;
     let cur =
-        resolve_window(&windows, target).ok_or_else(|| AriaError::msg("window disappeared"))?;
+        resolve_window(&windows, target).ok_or_else(|| NovaError::msg("window disappeared"))?;
     powershell(&format!(
-        "{USER32}\n[void][ARIAWin]::MoveWindow([IntPtr]{h}, {x}, {y}, {}, {}, $true)",
+        "{USER32}\n[void][NOVAWin]::MoveWindow([IntPtr]{h}, {x}, {y}, {}, {}, $true)",
         cur.w, cur.h
     ))
     .await?;
@@ -202,9 +202,9 @@ pub async fn resize_window(target: &str, w: i32, h: i32) -> JResult<()> {
     let handle = target_handle(target).await?;
     let windows = list_windows().await?;
     let cur =
-        resolve_window(&windows, target).ok_or_else(|| AriaError::msg("window disappeared"))?;
+        resolve_window(&windows, target).ok_or_else(|| NovaError::msg("window disappeared"))?;
     powershell(&format!(
-        "{USER32}\n[void][ARIAWin]::MoveWindow([IntPtr]{handle}, {}, {}, {w}, {h}, $true)",
+        "{USER32}\n[void][NOVAWin]::MoveWindow([IntPtr]{handle}, {}, {}, {w}, {h}, $true)",
         cur.x, cur.y
     ))
     .await?;
@@ -215,7 +215,7 @@ pub async fn close_window(target: &str) -> JResult<()> {
     let h = target_handle(target).await?;
     // WM_CLOSE (0x0010) — lets the app run its own save/confirm logic.
     powershell(&format!(
-        "{USER32}\n[void][ARIAWin]::PostMessage([IntPtr]{h}, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)"
+        "{USER32}\n[void][NOVAWin]::PostMessage([IntPtr]{h}, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)"
     ))
     .await?;
     Ok(())
@@ -225,7 +225,7 @@ pub async fn minimize_window(target: &str) -> JResult<()> {
     let h = target_handle(target).await?;
     // SW_MINIMIZE = 6
     powershell(&format!(
-        "{USER32}\n[void][ARIAWin]::ShowWindow([IntPtr]{h}, 6)"
+        "{USER32}\n[void][NOVAWin]::ShowWindow([IntPtr]{h}, 6)"
     ))
     .await?;
     Ok(())
@@ -235,7 +235,7 @@ pub async fn maximize_window(target: &str) -> JResult<()> {
     let h = target_handle(target).await?;
     // SW_MAXIMIZE = 3
     powershell(&format!(
-        "{USER32}\n[void][ARIAWin]::ShowWindow([IntPtr]{h}, 3)"
+        "{USER32}\n[void][NOVAWin]::ShowWindow([IntPtr]{h}, 3)"
     ))
     .await?;
     Ok(())
